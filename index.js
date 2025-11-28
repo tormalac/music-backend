@@ -23,18 +23,24 @@ const upload = multer({ storage });
 // 🔼 Feltöltés
 app.post("/upload", upload.single("file"), (req, res) => {
     try {
-        console.log("req.file:", req.file); // Ellenőrizni, hogy van-e fájl
-        if (!req.file) return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
+        console.log("=== Upload request ===");
+        console.log("req.file:", req.file); // Ellenőrizzük, hogy megjön-e a fájl
+
+        if (!req.file) {
+            console.warn("Nincs kiválasztott fájl!");
+            return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
+        }
 
         const fileBuffer = req.file.buffer;
 
         const uploadStream = cloudinary.uploader.upload_stream(
-            { resource_type: "auto" }, // MP3-hoz 'auto' jobb
+            { resource_type: "auto" }, // MP3-hoz 'auto' a jó
             (error, result) => {
                 if (error) {
                     console.error("Cloudinary hiba:", error);
-                    return res.status(500).json({ error });
+                    return res.status(500).json({ error: error.message, raw: error });
                 }
+
                 console.log("Cloudinary feltöltve:", result);
                 res.json({ url: result.secure_url, public_id: result.public_id });
             }
@@ -43,7 +49,7 @@ app.post("/upload", upload.single("file"), (req, res) => {
         uploadStream.end(fileBuffer);
 
     } catch (error) {
-        console.error(error);
+        console.error("Catch error:", error);
         res.status(500).json({ error: error.message });
     }
 });
@@ -81,5 +87,6 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
