@@ -58,13 +58,15 @@ app.post("/upload", upload.single("file"), (req, res) => {
 app.delete("/delete/:public_id", async (req, res) => {
     try {
         await cloudinary.uploader.destroy(req.params.public_id, {
-            resource_type: "raw"
+            resource_type: "auto" // MP3-hoz auto kell
         });
         res.json({ message: "Fájl törölve" });
     } catch (err) {
+        console.error("Cloudinary törlés hiba:", err);
         res.status(500).json({ error: err.message });
     }
 });
+
 
 // 📑 Duplikálás (fájl újrafeltöltése)
 app.post("/duplicate", upload.single("file"), (req, res) => {
@@ -87,6 +89,7 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
 
