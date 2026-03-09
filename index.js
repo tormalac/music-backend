@@ -54,6 +54,29 @@ app.post("/upload", upload.single("file"), (req, res) => {
     }
 });
 
+// 💾 Projekt (JSON) feltöltése
+app.post("/upload-project", upload.single("file"), (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: "Nincs JSON fájl!" });
+
+        const uploadStream = cloudinary.uploader.upload_stream(
+            { resource_type: "raw" }, // A JSON fájlokhoz "raw" kell!
+            (error, result) => {
+                if (error) {
+                    console.error("Cloudinary projekt mentés hiba:", error);
+                    return res.status(500).json({ error: error.message });
+                }
+                res.json({ url: result.secure_url, public_id: result.public_id });
+            }
+        );
+
+        uploadStream.end(req.file.buffer);
+
+    } catch (error) {
+        res.status(500).json({ error: error.message });
+    }
+});
+
 // ❌ Törlés
 app.delete("/delete/:public_id", async (req, res) => {
     try {
