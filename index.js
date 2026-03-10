@@ -26,7 +26,7 @@ const upload = multer({
     limits: { fileSize: 50 * 1024 * 1024 } // 50 MB maximális fájlméret
 });
 
-// 🔼 Feltöltés
+// 🔼 Feltöltés (AUDIO / WAV fájlokhoz)
 app.post("/upload", upload.single("file"), (req, res) => {
     try {
         console.log("=== Upload request ===");
@@ -38,7 +38,10 @@ app.post("/upload", upload.single("file"), (req, res) => {
         const fileBuffer = req.file.buffer;
 
         const uploadStream = cloudinary.uploader.upload_stream(
-            { resource_type: "auto" }, // MP3-hoz 'auto' a jó
+            { 
+                resource_type: "video", // KÖTELEZŐ: A Cloudinary az audiót is ide sorolja!
+                format: "wav"           // Erőszakkal megmondjuk neki, hogy ez egy WAV hangfájl
+            }, 
             (error, result) => {
                 if (error) {
                     console.error("Cloudinary hiba:", error);
