@@ -7,7 +7,10 @@ import cors from "cors";
 dotenv.config();
 const app = express();
 app.use(cors());
-app.use(express.json());
+
+// --- ÚJ: Express limitek felemelése 50MB-ra ---
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ limit: '50mb', extended: true }));
 
 // Cloudinary konfiguráció
 cloudinary.config({
@@ -16,16 +19,17 @@ cloudinary.config({
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Multer: fájl memóriában
+// --- ÚJ: Multer limitek felemelése 50MB-ra ---
 const storage = multer.memoryStorage();
-const upload = multer({ storage });
+const upload = multer({ 
+    storage,
+    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB maximális fájlméret
+});
 
 // 🔼 Feltöltés
 app.post("/upload", upload.single("file"), (req, res) => {
     try {
         console.log("=== Upload request ===");
-        console.log("req.file:", req.file); // Ellenőrizzük, hogy megjön-e a fájl
-
         if (!req.file) {
             console.warn("Nincs kiválasztott fájl!");
             return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
@@ -90,7 +94,6 @@ app.delete("/delete/:public_id", async (req, res) => {
     }
 });
 
-
 // 📑 Duplikálás (fájl újrafeltöltése)
 app.post("/duplicate", upload.single("file"), (req, res) => {
     try {
@@ -112,7 +115,5 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-
 
 
