@@ -84,13 +84,18 @@ app.post("/upload-project", upload.single("file"), (req, res) => {
     }
 });
 
-// ❌ Törlés
+// ❌ Törlés (Okosított verzió Audióhoz és JSON-hoz)
 app.delete("/delete/:public_id", async (req, res) => {
     try {
-        await cloudinary.uploader.destroy(req.params.public_id, {
-            resource_type: "auto" // MP3-hoz auto kell
-        });
-        res.json({ message: "Fájl törölve" });
+        const pubId = req.params.public_id;
+        
+        // 1. Megpróbáljuk törölni, mintha Audió/Videó lenne (WAV fájlok)
+        await cloudinary.uploader.destroy(pubId, { resource_type: "video" });
+        
+        // 2. Megpróbáljuk törölni, mintha nyers adat lenne (JSON fájlok)
+        await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });
+        
+        res.json({ message: "Fájl törölve a felhőből" });
     } catch (err) {
         console.error("Cloudinary törlés hiba:", err);
         res.status(500).json({ error: err.message });
