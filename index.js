@@ -42,16 +42,18 @@ app.post("/upload", upload.single("file"), (req, res) => {
             return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
         }
 
-        // A MEGOLDÁS: upload_large használata a hatalmas WAV fájlokhoz, 6MB-os darabokban!
+        // A TÖKÉLETES MEGOLDÁS: upload_large + resource_type: "raw"
+        // Így a Cloudinary nem próbálja elemezni a fájlt, csak letárolja. Nincs limit!
         cloudinary.uploader.upload_large(req.file.path, {
-            resource_type: "video",
-            format: "wav",
-            chunk_size: 6000000 // 6 MB-os szeletekre vágja feltöltés közben
+            resource_type: "raw",  // <-- EZ A MÁGIA! Nem "video", így azonnal elmenti.
+            chunk_size: 6000000    // 6 MB-os darabokban küldjük a stabilitásért
         }, (error, result) => {
             
-            // Miután végzett a Cloudinary, letöröljük a temp fájlt a szerverről!
-            fs.unlink(req.file.path, (err) => {
-                if (err) console.error("Nem sikerült törölni a temp fájlt:", err);
+            // Temp fájl törlése a szerverről (hogy ne teljen be a Render)
+            import('fs').then(fs => {
+                fs.unlink(req.file.path, (err) => {
+                    if (err) console.error("Nem sikerült törölni a temp fájlt:", err);
+                });
             });
 
             if (error) {
@@ -130,5 +132,6 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
 
 
