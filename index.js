@@ -42,8 +42,8 @@ app.post("/upload", upload.single("file"), (req, res) => {
             return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
         }
 
-        // A Cloudinary közvetlenül a fájl elérési útjáról (path) tölt fel
-        cloudinary.uploader.upload(req.file.path, {
+        // A MEGOLDÁS: upload_large használata a hatalmas WAV fájlokhoz!
+        cloudinary.uploader.upload_large(req.file.path, {
             resource_type: "video",
             format: "wav"
         }, (error, result) => {
@@ -129,3 +129,4 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
