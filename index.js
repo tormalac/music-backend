@@ -3,27 +3,34 @@ import multer from "multer";
 import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import cors from "cors";
+import fs from "fs"; // <-- ÚJ: Fájlrendszer kezeléséhez
 
 dotenv.config();
 const app = express();
 app.use(cors());
 
-// --- ÚJ: Express limitek felemelése 50MB-ra ---
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ limit: '50mb', extended: true }));
+app.use(express.json({ limit: '200mb' }));
+app.use(express.urlencoded({ limit: '200mb', extended: true }));
 
-// Cloudinary konfiguráció
 cloudinary.config({
     cloud_name: process.env.CLOUD_NAME,
     api_key: process.env.CLOUDINARY_API_KEY,
     api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// --- ÚJ: Multer limitek felemelése 50MB-ra ---
-const storage = multer.memoryStorage();
+// --- ÚJ: RAM-barát Disk Storage ---
+const storage = multer.diskStorage({
+    destination: function (req, file, cb) {
+        cb(null, '/tmp'); // A Render Linux alapú, a /tmp tökéletes ideiglenes mappa
+    },
+    filename: function (req, file, cb) {
+        cb(null, Date.now() + '-' + file.originalname);
+    }
+});
+
 const upload = multer({ 
     storage,
-    limits: { fileSize: 50 * 1024 * 1024 } // 50 MB maximális fájlméret
+    limits: { fileSize: 200 * 1024 * 1024 } // Limit felemelve 200 MB-ra!
 });
 
 // 🔼 Feltöltés (AUDIO / WAV fájlokhoz)
@@ -35,25 +42,25 @@ app.post("/upload", upload.single("file"), (req, res) => {
             return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
         }
 
-        const fileBuffer = req.file.buffer;
+        // A Cloudinary közvetlenül a fájl elérési útjáról (path) tölt fel
+        cloudinary.uploader.upload(req.file.path, {
+            resource_type: "video",
+            format: "wav"
+        }, (error, result) => {
+            
+            // Miután végzett a Cloudinary (akár sikerrel, akár hibával), letöröljük a temp fájlt!
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Nem sikerült törölni a temp fájlt:", err);
+            });
 
-        const uploadStream = cloudinary.uploader.upload_stream(
-            { 
-                resource_type: "video", // KÖTELEZŐ: A Cloudinary az audiót is ide sorolja!
-                format: "wav"           // Erőszakkal megmondjuk neki, hogy ez egy WAV hangfájl
-            }, 
-            (error, result) => {
-                if (error) {
-                    console.error("Cloudinary hiba:", error);
-                    return res.status(500).json({ error: error.message, raw: error });
-                }
-
-                console.log("Cloudinary feltöltve:", result);
-                res.json({ url: result.secure_url, public_id: result.public_id });
+            if (error) {
+                console.error("Cloudinary hiba:", error);
+                return res.status(500).json({ error: error.message, raw: error });
             }
-        );
 
-        uploadStream.end(fileBuffer);
+            console.log("Cloudinary feltöltve:", result.secure_url);
+            res.json({ url: result.secure_url, public_id: result.public_id });
+        });
 
     } catch (error) {
         console.error("Catch error:", error);
@@ -66,35 +73,33 @@ app.post("/upload-project", upload.single("file"), (req, res) => {
     try {
         if (!req.file) return res.status(400).json({ error: "Nincs JSON fájl!" });
 
-        const uploadStream = cloudinary.uploader.upload_stream(
-            { resource_type: "raw" }, // A JSON fájlokhoz "raw" kell!
-            (error, result) => {
-                if (error) {
-                    console.error("Cloudinary projekt mentés hiba:", error);
-                    return res.status(500).json({ error: error.message });
-                }
-                res.json({ url: result.secure_url, public_id: result.public_id });
-            }
-        );
+        cloudinary.uploader.upload(req.file.path, {
+            resource_type: "raw" 
+        }, (error, result) => {
+            
+            // Temp fájl törlése
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Nem sikerült törölni a temp fájlt:", err);
+            });
 
-        uploadStream.end(req.file.buffer);
+            if (error) {
+                console.error("Cloudinary projekt mentés hiba:", error);
+                return res.status(500).json({ error: error.message });
+            }
+            res.json({ url: result.secure_url, public_id: result.public_id });
+        });
 
     } catch (error) {
         res.status(500).json({ error: error.message });
     }
 });
 
-// ❌ Törlés (Okosított verzió Audióhoz és JSON-hoz)
+// ❌ Törlés (Marad az eredeti szuper verziód)
 app.delete("/delete/:public_id", async (req, res) => {
     try {
         const pubId = req.params.public_id;
-        
-        // 1. Megpróbáljuk törölni, mintha Audió/Videó lenne (WAV fájlok)
         await cloudinary.uploader.destroy(pubId, { resource_type: "video" });
-        
-        // 2. Megpróbáljuk törölni, mintha nyers adat lenne (JSON fájlok)
         await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });
-        
         res.json({ message: "Fájl törölve a felhőből" });
     } catch (err) {
         console.error("Cloudinary törlés hiba:", err);
@@ -102,19 +107,20 @@ app.delete("/delete/:public_id", async (req, res) => {
     }
 });
 
-// 📑 Duplikálás (fájl újrafeltöltése)
+// 📑 Duplikálás
 app.post("/duplicate", upload.single("file"), (req, res) => {
     try {
-        const fileBuffer = req.file.buffer;
-        const uploadStream = cloudinary.uploader.upload_stream(
-            { resource_type: "raw" },
-            (error, result) => {
-                if (error) return res.status(500).json({ error });
-                res.json({ url: result.secure_url, public_id: result.public_id });
-            }
-        );
+        cloudinary.uploader.upload(req.file.path, {
+            resource_type: "raw"
+        }, (error, result) => {
+            
+            fs.unlink(req.file.path, (err) => {
+                if (err) console.error("Nem sikerült törölni a temp fájlt:", err);
+            });
 
-        uploadStream.end(fileBuffer);
+            if (error) return res.status(500).json({ error });
+            res.json({ url: result.secure_url, public_id: result.public_id });
+        });
 
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -123,5 +129,3 @@ app.post("/duplicate", upload.single("file"), (req, res) => {
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-
-
