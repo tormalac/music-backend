@@ -38,7 +38,7 @@ const upload = multer({
     limits: { fileSize: 200 * 1024 * 1024 } // Limit felemelve 200 MB-ra!
 });
 
-// 🔼 Feltöltés (AUDIO / WAV fájlokhoz)
+// 🔼 Feltöltés (AUDIO / WAV / KÉP fájlokhoz)
 app.post("/upload", upload.single("file"), (req, res) => {
     try {
         console.log("=== Upload request ===");
@@ -47,13 +47,14 @@ app.post("/upload", upload.single("file"), (req, res) => {
             return res.status(400).json({ error: "Nincs kiválasztott fájl!" });
         }
 
-        // VISSZATÉRÜNK A "VIDEO" TÍPUSHOZ (Mert annak 100 MB a limitje!)
+        // --- ÚJ: Fájltípus detektálása ---
+        // Megnézzük a fájl mimetype-ját. Ha 'image/'-vel kezdődik, akkor kép, különben marad videó/audio
+        const isImage = req.file.mimetype.startsWith('image/');
+        const resType = isImage ? "image" : "video";
+
         cloudinary.uploader.upload_large(req.file.path, {
-            resource_type: "video", 
+            resource_type: resType, // <--- DINAMIKUS TÍPUS!
             chunk_size: 6000000
-            // FONTOS: KIVETTÜK A 'format: "wav"' SORT!
-            // Így a Cloudinary nem próbálja meg átkódolni a hatalmas fájlt, 
-            // hanem szó nélkül elmenti eredeti állapotában.
         }, (error, result) => {
             
             // Temp fájl törlése
@@ -104,12 +105,16 @@ app.post("/upload-project", upload.single("file"), (req, res) => {
     }
 });
 
-// ❌ Törlés (Marad az eredeti szuper verziód)
+// ❌ Törlés (Bővítve képek támogatásával)
 app.delete("/delete/:public_id", async (req, res) => {
     try {
         const pubId = req.params.public_id;
-        await cloudinary.uploader.destroy(pubId, { resource_type: "video" });
-        await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });
+        
+        // Végigmegyünk mind a 3 lehetséges típuson, mert a Cloudinary típus-specifikusan töröl
+        await cloudinary.uploader.destroy(pubId, { resource_type: "video" }); // Zenékhez
+        await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });   // JSON-ökhöz
+        await cloudinary.uploader.destroy(pubId, { resource_type: "image" }); // ÚJ: Borítóképekhez
+        
         res.json({ message: "Fájl törölve a felhőből" });
     } catch (err) {
         console.error("Cloudinary törlés hiba:", err);
