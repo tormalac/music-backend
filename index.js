@@ -105,16 +105,14 @@ app.post("/upload-project", upload.single("file"), (req, res) => {
     }
 });
 
-// ❌ Törlés (Bővítve képek támogatásával)
+// ❌ Törlés (Kiegészítve képekkel)
 app.delete("/delete/:public_id", async (req, res) => {
     try {
         const pubId = req.params.public_id;
-        
-        // Végigmegyünk mind a 3 lehetséges típuson, mert a Cloudinary típus-specifikusan töröl
-        await cloudinary.uploader.destroy(pubId, { resource_type: "video" }); // Zenékhez
-        await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });   // JSON-ökhöz
-        await cloudinary.uploader.destroy(pubId, { resource_type: "image" }); // ÚJ: Borítóképekhez
-        
+        // Mindhárom típuson végigmegyünk, hogy biztosan töröljük
+        await cloudinary.uploader.destroy(pubId, { resource_type: "video" });
+        await cloudinary.uploader.destroy(pubId, { resource_type: "raw" });
+        await cloudinary.uploader.destroy(pubId, { resource_type: "image" }); // <--- EZ KELL A BORÍTÓKHOZ
         res.json({ message: "Fájl törölve a felhőből" });
     } catch (err) {
         console.error("Cloudinary törlés hiba:", err);
